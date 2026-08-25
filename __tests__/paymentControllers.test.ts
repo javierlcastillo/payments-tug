@@ -225,6 +225,7 @@ describe('createCheckoutSession', () => {
         mockCheckoutSessionsCreate.mockResolvedValueOnce({
             id: 'cs_123',
             client_secret: 'cs_123_secret',
+            payment_intent: 'pi_123',
         });
 
         const res = await request(app)
@@ -234,6 +235,7 @@ describe('createCheckoutSession', () => {
         expect(res.status).toBe(201);
         expect(res.body.sessionId).toBe('cs_123');
         expect(res.body.clientSecret).toBe('cs_123_secret');
+        expect(res.body.paymentIntentId).toBe('pi_123');
         expect(res.body.platformFee).toBe(100);
 
         const callArgs = mockCheckoutSessionsCreate.mock.calls[0][0];
@@ -254,6 +256,26 @@ describe('createCheckoutSession', () => {
             .send({ ...validBody, amount: 3333, applicationFeeAmount: 333.3 });
 
         expect(res.body.platformFee).toBe(333);
+    });
+
+    it('unwraps paymentIntentId when Stripe returns an expanded payment_intent object', async () => {
+        mockCheckoutSessionsCreate.mockResolvedValueOnce({
+            id: 'cs_789',
+            client_secret: 'secret',
+            payment_intent: { id: 'pi_789' },
+        });
+
+        const res = await request(app).post('/payments/checkout-sessions').send(validBody);
+
+        expect(res.body.paymentIntentId).toBe('pi_789');
+    });
+
+    it('returns paymentIntentId null when Stripe omits payment_intent', async () => {
+        mockCheckoutSessionsCreate.mockResolvedValueOnce({ id: 'cs_000', client_secret: 'secret' });
+
+        const res = await request(app).post('/payments/checkout-sessions').send(validBody);
+
+        expect(res.body.paymentIntentId).toBeNull();
     });
 
     it('returns 500 when Stripe throws an error', async () => {

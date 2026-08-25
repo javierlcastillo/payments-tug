@@ -42,5 +42,6 @@ export interface CheckoutSessionRequest {
 export interface CheckoutSessionResponse {
     clientSecret: string | null;
     sessionId: string;
+    paymentIntentId: string | null;
     platformFee: number;
 }

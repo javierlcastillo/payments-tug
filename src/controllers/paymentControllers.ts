@@ -99,9 +99,14 @@ export const createCheckoutSession = async (req: Request, res: Response): Promis
         metadata: { appId, eventId, userId, ticketTypeId, quantity: String(quantity) },
     });
 
+    const paymentIntentId = typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent?.id ?? null;
+
     res.status(201).json({
         clientSecret: session.client_secret,
         sessionId: session.id,
+        paymentIntentId,
         platformFee,
     });
   } catch (err) {

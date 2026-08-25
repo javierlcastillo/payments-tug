@@ -246,6 +246,10 @@ paths:
                   sessionId:
                     type: string
                     example: cs_xxx
+                  paymentIntentId:
+                    type: string
+                    description: ID of the PaymentIntent created immediately underneath this Checkout Session (mode 'payment' creates it upfront). Useful for the client to pre-insert the `payments` row before the buyer completes checkout.
+                    example: pi_xxx
                   platformFee:
                     type: integer
                     description: Platform fee in cents, echoed back from applicationFeeAmount
