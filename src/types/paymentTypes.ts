@@ -22,5 +22,25 @@ export interface PaymentStatusResponse {
     id: string;
     status: "succeeded" | "processing" | "requires_payment_method" | "requires_confirmation" | "canceled";
     amount: number;
-    currency: string; 
+    currency: string;
+}
+
+export interface CheckoutSessionRequest {
+    amount: number;
+    currency: string;
+    customerId: string;
+    destinationAccountId: string;
+    applicationFeeAmount: number;
+    appId: string;
+    eventId: string;
+    userId: string;
+    ticketTypeId: string;
+    quantity: number;
+    returnUrl: string;
+}
+
+export interface CheckoutSessionResponse {
+    clientSecret: string | null;
+    sessionId: string;
+    platformFee: number;
 }

@@ -1,9 +1,10 @@
 import request from 'supertest';
 import express from 'express';
-import { createPayment, getPaymentStatus } from '../src/controllers/paymentControllers';
+import { createPayment, createCheckoutSession, getPaymentStatus } from '../src/controllers/paymentControllers';
 
-const mockPaymentIntentsCreate   = jest.fn();
-const mockPaymentIntentsRetrieve = jest.fn();
+const mockPaymentIntentsCreate    = jest.fn();
+const mockPaymentIntentsRetrieve  = jest.fn();
+const mockCheckoutSessionsCreate  = jest.fn();
 
 jest.mock('stripe', () => {
     return jest.fn().mockImplementation(() => ({
@@ -11,12 +12,18 @@ jest.mock('stripe', () => {
             create:   mockPaymentIntentsCreate,
             retrieve: mockPaymentIntentsRetrieve,
         },
+        checkout: {
+            sessions: {
+                create: mockCheckoutSessionsCreate,
+            },
+        },
     }));
 });
 
 const app = express();
 app.use(express.json());
 app.post('/payments', createPayment);
+app.post('/payments/checkout-sessions', createCheckoutSession);
 app.get('/payments/:id', getPaymentStatus);
 
 beforeAll(() => {
@@ -145,6 +152,117 @@ describe('createPayment', () => {
 
         expect(res.status).toBe(500);
         expect(res.body.error).toBe('Failed to create payment');
+    });
+});
+
+// ─── createCheckoutSession ────────────────────────────────────────────────────
+
+describe('createCheckoutSession', () => {
+    const validBody = {
+        amount: 1000,
+        currency: 'usd',
+        customerId: 'cus_123',
+        destinationAccountId: 'acct_123',
+        applicationFeeAmount: 100,
+        appId: 'app_1',
+        eventId: 'evt_1',
+        userId: 'user_1',
+        ticketTypeId: 'ticket_type_1',
+        quantity: 1,
+        returnUrl: 'https://example.com/checkout/return',
+    };
+
+    it('returns 400 when required fields are missing', async () => {
+        const res = await request(app)
+            .post('/payments/checkout-sessions')
+            .send({ amount: 1000 });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('Missing required fields');
+    });
+
+    it('returns 400 when returnUrl is missing', async () => {
+        const { returnUrl, ...rest } = validBody;
+
+        const res = await request(app)
+            .post('/payments/checkout-sessions')
+            .send(rest);
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('Missing required fields');
+    });
+
+    it('returns 400 when applicationFeeAmount is missing', async () => {
+        const { applicationFeeAmount, ...rest } = validBody;
+
+        const res = await request(app)
+            .post('/payments/checkout-sessions')
+            .send(rest);
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('Invalid applicationFeeAmount');
+    });
+
+    it('returns 400 when applicationFeeAmount is negative', async () => {
+        const res = await request(app)
+            .post('/payments/checkout-sessions')
+            .send({ ...validBody, applicationFeeAmount: -1 });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('Invalid applicationFeeAmount');
+    });
+
+    it('returns 400 when applicationFeeAmount exceeds amount', async () => {
+        const res = await request(app)
+            .post('/payments/checkout-sessions')
+            .send({ ...validBody, applicationFeeAmount: 1001 });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('Invalid applicationFeeAmount');
+    });
+
+    it('returns 201 with clientSecret, sessionId and the client-provided platformFee', async () => {
+        mockCheckoutSessionsCreate.mockResolvedValueOnce({
+            id: 'cs_123',
+            client_secret: 'cs_123_secret',
+        });
+
+        const res = await request(app)
+            .post('/payments/checkout-sessions')
+            .send(validBody);
+
+        expect(res.status).toBe(201);
+        expect(res.body.sessionId).toBe('cs_123');
+        expect(res.body.clientSecret).toBe('cs_123_secret');
+        expect(res.body.platformFee).toBe(100);
+
+        const callArgs = mockCheckoutSessionsCreate.mock.calls[0][0];
+        expect(callArgs.ui_mode).toBe('embedded_page');
+        expect(callArgs.mode).toBe('payment');
+        expect(callArgs.return_url).toBe(validBody.returnUrl);
+        expect(callArgs.payment_intent_data.application_fee_amount).toBe(100);
+        expect(callArgs.payment_intent_data.transfer_data.destination).toBe('acct_123');
+        expect(callArgs.line_items[0].price_data.unit_amount).toBe(1000);
+        expect(callArgs.line_items[0].price_data.currency).toBe('usd');
+    });
+
+    it('passes through a fractional-commission fee unchanged (rounded)', async () => {
+        mockCheckoutSessionsCreate.mockResolvedValueOnce({ id: 'cs_456', client_secret: 'secret' });
+
+        const res = await request(app)
+            .post('/payments/checkout-sessions')
+            .send({ ...validBody, amount: 3333, applicationFeeAmount: 333.3 });
+
+        expect(res.body.platformFee).toBe(333);
+    });
+
+    it('returns 500 when Stripe throws an error', async () => {
+        mockCheckoutSessionsCreate.mockRejectedValueOnce(new Error('Invalid customer'));
+
+        const res = await request(app).post('/payments/checkout-sessions').send(validBody);
+
+        expect(res.status).toBe(500);
+        expect(res.body.error).toBe('Failed to create checkout session');
     });
 });
 

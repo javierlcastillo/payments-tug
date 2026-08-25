@@ -169,6 +169,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /payments/checkout-sessions:
+    post:
+      summary: Create an embedded Checkout Session
+      description: Web-only. Creates a Stripe Checkout Session (ui_mode `embedded_page`) with Connect transfer to the organizer, for mounting inline in Flutter web via Stripe.js embedded checkout. The client_secret returned here is a Checkout Session client secret, distinct from the PaymentIntent client secret used by POST /payments.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amount
+                - currency
+                - customerId
+                - destinationAccountId
+                - applicationFeeAmount
+                - appId
+                - eventId
+                - userId
+                - ticketTypeId
+                - quantity
+                - returnUrl
+              properties:
+                amount:
+                  type: integer
+                  description: Total in cents
+                  example: 50000
+                currency:
+                  type: string
+                  example: mxn
+                customerId:
+                  type: string
+                  example: cus_xxx
+                destinationAccountId:
+                  type: string
+                  description: Stripe Connect account ID of the organizer
+                  example: acct_xxx
+                applicationFeeAmount:
+                  type: integer
+                  description: Platform fee in cents, computed by the client from the organizer's commission rate. Must be >= 0 and <= amount.
+                  example: 5000
+                appId:
+                  type: string
+                  example: spot
+                eventId:
+                  type: string
+                  example: uuid
+                userId:
+                  type: string
+                  description: Supabase user id of the buyer, stored in the Checkout Session and PaymentIntent metadata so the payment-webhook edge function can create the event_bookings row(s)
+                  example: uuid
+                ticketTypeId:
+                  type: string
+                  description: event_ticket_types id being purchased, stored in the Checkout Session and PaymentIntent metadata
+                  example: uuid
+                quantity:
+                  type: integer
+                  description: Number of tickets being purchased. Must be >= 1.
+                  example: 1
+                returnUrl:
+                  type: string
+                  description: URL Stripe redirects to for payment methods that require an off-page redirect step (e.g. some 3DS flows), even though the main flow stays embedded
+                  example: https://app.spot.mx/checkout/return
+      responses:
+        '201':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientSecret:
+                    type: string
+                    description: Checkout Session client secret, used to initialize Stripe.js embedded checkout. Distinct from a PaymentIntent client secret.
+                  sessionId:
+                    type: string
+                    example: cs_xxx
+                  platformFee:
+                    type: integer
+                    description: Platform fee in cents, echoed back from applicationFeeAmount
+                    example: 5000
+        '400':
+          description: Missing required fields, or applicationFeeAmount is missing/negative/greater than amount
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Failed to create checkout session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /payments/customers:
     post:
       summary: Create or get Stripe customer
