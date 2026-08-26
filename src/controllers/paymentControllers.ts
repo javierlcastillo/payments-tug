@@ -118,6 +118,35 @@ export const createCheckoutSession = async (req: Request, res: Response): Promis
   }
 };
 
+// Stripe no crea el PaymentIntent de una Checkout Session hasta que el
+// comprador empieza a completar el pago — al crear la sesión (arriba)
+// `payment_intent` siempre viene null. El cliente web llama este endpoint
+// después de que el embedded Checkout reporta `onComplete`, para recién ahí
+// obtener el id y poder insertar la fila de `payments`.
+export const getCheckoutSessionStatus = async (req: Request, res: Response): Promise<void> => {
+  const sessionId = req.params.sessionId as string;
+
+  try {
+    const session = await getStripe().checkout.sessions.retrieve(sessionId);
+
+    const paymentIntentId = typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent?.id ?? null;
+
+    res.status(200).json({
+        sessionId: session.id,
+        status: session.status,
+        paymentIntentId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({
+        error: 'Failed to retrieve checkout session',
+        ...(process.env.NODE_ENV !== 'production' && { detail: message }),
+    });
+  }
+};
+
 export const getPaymentStatus = async (req: Request, res: Response): Promise<void> => {
   const id = req.params.id as string;
 

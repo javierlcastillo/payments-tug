@@ -36,6 +36,7 @@ export const handleStripeWebhook = async (req: Request, res: Response): Promise<
                     paymentIntentId: intent.id,
                     amount: intent.amount,
                     currency: intent.currency,
+                    applicationFeeAmount: intent.application_fee_amount ?? undefined,
                     metadata: intent.metadata,
                 });
                 break;

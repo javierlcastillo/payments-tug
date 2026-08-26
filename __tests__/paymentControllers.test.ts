@@ -1,10 +1,11 @@
 import request from 'supertest';
 import express from 'express';
-import { createPayment, createCheckoutSession, getPaymentStatus } from '../src/controllers/paymentControllers';
+import { createPayment, createCheckoutSession, getCheckoutSessionStatus, getPaymentStatus } from '../src/controllers/paymentControllers';
 
 const mockPaymentIntentsCreate    = jest.fn();
 const mockPaymentIntentsRetrieve  = jest.fn();
 const mockCheckoutSessionsCreate  = jest.fn();
+const mockCheckoutSessionsRetrieve = jest.fn();
 
 jest.mock('stripe', () => {
     return jest.fn().mockImplementation(() => ({
@@ -15,6 +16,7 @@ jest.mock('stripe', () => {
         checkout: {
             sessions: {
                 create: mockCheckoutSessionsCreate,
+                retrieve: mockCheckoutSessionsRetrieve,
             },
         },
     }));
@@ -24,6 +26,7 @@ const app = express();
 app.use(express.json());
 app.post('/payments', createPayment);
 app.post('/payments/checkout-sessions', createCheckoutSession);
+app.get('/payments/checkout-sessions/:sessionId', getCheckoutSessionStatus);
 app.get('/payments/:id', getPaymentStatus);
 
 beforeAll(() => {
@@ -285,6 +288,60 @@ describe('createCheckoutSession', () => {
 
         expect(res.status).toBe(500);
         expect(res.body.error).toBe('Failed to create checkout session');
+    });
+});
+
+// ─── getCheckoutSessionStatus ─────────────────────────────────────────────────
+
+describe('getCheckoutSessionStatus', () => {
+    it('returns 200 with the resolved paymentIntentId once the session has one', async () => {
+        mockCheckoutSessionsRetrieve.mockResolvedValueOnce({
+            id: 'cs_123',
+            status: 'complete',
+            payment_intent: 'pi_123',
+        });
+
+        const res = await request(app).get('/payments/checkout-sessions/cs_123');
+
+        expect(res.status).toBe(200);
+        expect(res.body.sessionId).toBe('cs_123');
+        expect(res.body.status).toBe('complete');
+        expect(res.body.paymentIntentId).toBe('pi_123');
+        expect(mockCheckoutSessionsRetrieve.mock.calls[0][0]).toBe('cs_123');
+    });
+
+    it('unwraps paymentIntentId when Stripe returns an expanded payment_intent object', async () => {
+        mockCheckoutSessionsRetrieve.mockResolvedValueOnce({
+            id: 'cs_789',
+            status: 'complete',
+            payment_intent: { id: 'pi_789' },
+        });
+
+        const res = await request(app).get('/payments/checkout-sessions/cs_789');
+
+        expect(res.body.paymentIntentId).toBe('pi_789');
+    });
+
+    it('returns paymentIntentId null while the session is still open', async () => {
+        mockCheckoutSessionsRetrieve.mockResolvedValueOnce({
+            id: 'cs_000',
+            status: 'open',
+        });
+
+        const res = await request(app).get('/payments/checkout-sessions/cs_000');
+
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe('open');
+        expect(res.body.paymentIntentId).toBeNull();
+    });
+
+    it('returns 500 when Stripe throws an error', async () => {
+        mockCheckoutSessionsRetrieve.mockRejectedValueOnce(new Error('No such session'));
+
+        const res = await request(app).get('/payments/checkout-sessions/cs_bad');
+
+        expect(res.status).toBe(500);
+        expect(res.body.error).toBe('Failed to retrieve checkout session');
     });
 });
 

@@ -248,8 +248,9 @@ paths:
                     example: cs_xxx
                   paymentIntentId:
                     type: string
-                    description: ID of the PaymentIntent created immediately underneath this Checkout Session (mode 'payment' creates it upfront). Useful for the client to pre-insert the `payments` row before the buyer completes checkout.
-                    example: pi_xxx
+                    nullable: true
+                    description: Almost always null at this point — Stripe does not create the underlying PaymentIntent until the buyer starts completing the Checkout Session. Poll GET /payments/checkout-sessions/{sessionId} after the embedded checkout reports completion to get the resolved id.
+                    example: null
                   platformFee:
                     type: integer
                     description: Platform fee in cents, echoed back from applicationFeeAmount
@@ -262,6 +263,43 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: Failed to create checkout session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payments/checkout-sessions/{sessionId}:
+    get:
+      summary: Get the status and resolved paymentIntentId of a Checkout Session
+      description: Web-only. Stripe only creates the PaymentIntent underneath a Checkout Session once the buyer starts completing payment, so POST /payments/checkout-sessions returns paymentIntentId as null. The client calls this endpoint after the embedded checkout's onComplete fires, to fetch the now-resolved paymentIntentId before inserting the `payments` row.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: cs_xxx
+      responses:
+        '200':
+          description: Checkout session status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                    example: cs_xxx
+                  status:
+                    type: string
+                    description: Stripe Checkout Session status
+                    example: complete
+                  paymentIntentId:
+                    type: string
+                    nullable: true
+                    example: pi_xxx
+        '500':
+          description: Failed to retrieve checkout session
           content:
             application/json:
               schema:
