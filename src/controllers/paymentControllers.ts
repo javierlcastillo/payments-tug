@@ -83,6 +83,7 @@ export const createCheckoutSession = async (req: Request, res: Response): Promis
         mode: 'payment',
         customer: customerId,
         return_url: returnUrl,
+        redirect_on_completion: 'if_required',
         line_items: [{
             price_data: {
                 currency,
